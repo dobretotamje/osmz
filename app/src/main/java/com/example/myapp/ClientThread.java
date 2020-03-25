@@ -10,6 +10,8 @@ import android.webkit.MimeTypeMap;
 
 import androidx.annotation.RequiresApi;
 
+import org.apache.commons.io.IOUtils;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -28,8 +30,7 @@ public class ClientThread extends Thread {
     private final Handler handler;
     private final MimeTypeMap mimeTypeMap = MimeTypeMap.getSingleton();
     private final Semaphore semaphore;
-    private final MyPreviewCallback previewCallback;
-    private final MyPictureCallback pictureCallback;
+    private final ClientSpecialUriHandler clientSpecialUriHandler;
     private File root = Environment.getExternalStorageDirectory();
     private String locPath = Environment.getExternalStorageDirectory().getAbsolutePath();
 
@@ -37,8 +38,7 @@ public class ClientThread extends Thread {
         this.socket = socket;
         this.handler = handler;
         this.semaphore = semaphore;
-        this.previewCallback = previewCallback;
-        this.pictureCallback = pictureCallback;
+        this.clientSpecialUriHandler = new ClientSpecialUriHandler(previewCallback, pictureCallback);
     }
 
     private void sendMessage(String stringMessage) {
@@ -64,8 +64,9 @@ public class ClientThread extends Thread {
 
             if (request.getType() == RequestType.GET) {
 
-                File file = new File(locPath + "/" + filepath);
+                if (clientSpecialUriHandler.handle(filepath, o, out)) return;
 
+                File file = new File(locPath + "/" + filepath);
                 if (file.exists() && file.isFile()) {
                     final String mimeType = mimeTypeMap.getMimeTypeFromExtension(filepath);
                     out.write("HTTP/1.1 200 Ok\n" +
@@ -75,36 +76,13 @@ public class ClientThread extends Thread {
                     out.flush();
 
                     FileInputStream fileInputStream = new FileInputStream(file);
-                    byte[] buffer = new byte[1024];
-
-                    int len;
-                    while ((len = fileInputStream.read(buffer)) != -1) {
-                        o.write(buffer, 0, len);
-                    }
+                    IOUtils.copy(fileInputStream, o);
 
                     sendMessage(request.toString() + " Length: " + file.length());
 
                 } else if (file.exists() && file.isDirectory()) {
-                    if (file.getPath().contains("camera/stream")) {
-                        previewCallback.addClient(o);
-                        while (true) {
-                            sleep(1000);
-                        }
-                    } else if (file.getPath().contains("camera/snapshot")) {
-                        byte[] previousTakenPicture = pictureCallback.getPreviousTakenPicture();
-                        if (previousTakenPicture != null) {
-                            out.write("HTTP/1.1 200 Ok\n" +
-                                    "Content-Type: " + "image/jpeg" + "\n" +
-                                    "Content-length: " + previousTakenPicture.length + "\n" +
-                                    "\n");
-                            out.flush();
-                            o.write(previousTakenPicture);
-                        }
-
-                    } else {
-                        File otherFile = new File(root.getAbsolutePath() + "/" + filepath);
-                        writeDir(out, request.toString(), otherFile);
-                    }
+                    File otherFile = new File(root.getAbsolutePath() + "/" + filepath);
+                    writeDir(out, request.toString(), otherFile);
                 } else {
                     // unknown ? go to root folder
                     File otherFile = new File(root.getAbsolutePath() + "/");
@@ -112,14 +90,13 @@ public class ClientThread extends Thread {
                 }
             }
 
-            socket.close();
-            Log.d("SERVER", "Socket Closed");
         } catch (IOException | InterruptedException e) {
             Log.d("Client", "Something failed", e);
             e.printStackTrace();
         } finally {
             try {
                 socket.close();
+                Log.d("SERVER", "Socket Closed");
                 semaphore.release();
             } catch (IOException e) {
                 Log.d("Client", "Unable to close socket");
@@ -128,16 +105,7 @@ public class ClientThread extends Thread {
     }
 
     private void writeDir(BufferedWriter out, String request, File dirFile) throws IOException {
-        File[] arrayfile = dirFile.listFiles();
-
-        StringBuilder html = new StringBuilder("<html><body><h1>Files</h1>");
-        if (arrayfile.length > 0) {
-            for (File value : arrayfile) {
-                Log.d("Files", "FileName:" + value.getName());
-                html.append("+ <a href='").append(value.getName()).append("/' >").append(value.getName()).append("</a><br>");
-
-            }
-        }
+        String html = HTMLDirectoryListingBuilder.build(dirFile);
 
         out.write("HTTP/1.1 200 Ok\n" +
                 "Content-Type: text/html\n" +
@@ -145,7 +113,7 @@ public class ClientThread extends Thread {
 
         sendMessage(request + " Length: " + html.length());
 
-        out.write(html.toString());
+        out.write(html);
         out.flush();
     }
 }
