@@ -2,7 +2,6 @@ package com.example.myapp;
 
 import android.os.Handler;
 import android.util.Log;
-import android.widget.CompoundButton;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -14,9 +13,8 @@ import java.util.concurrent.Semaphore;
 import static com.example.myapp.HttpServerActivity.CAMERA_INSTANCE;
 
 
-public class SocketServer extends Thread {
+public class SocketServer {
 
-    private final static int DEFAULT_THREAD_COUNT = 5;
     private final Handler handler;
     private final int port = 11111;
     private Semaphore semaphore;
@@ -25,35 +23,28 @@ public class SocketServer extends Thread {
     private final MyPreviewCallback previewCallback;
     private final MyPictureCallback pictureCallback;
 
-    public SocketServer(Handler handler) {
+    public SocketServer(Handler handler, int threadCnt) {
         this.handler = handler;
-        this.semaphore = new Semaphore(DEFAULT_THREAD_COUNT);
+        this.semaphore = new Semaphore(threadCnt);
         this.previewCallback = new MyPreviewCallback();
         this.pictureCallback = new MyPictureCallback();
         CAMERA_INSTANCE.setPreviewCallback(previewCallback);
     }
 
-    public void setThreadsAvailable(int threadsCoutn) {
-        semaphore = new Semaphore(threadsCoutn);
-    }
-
-//    public void scheduleTakePicture() {
-//        Timer timerObj = new Timer();
-//        TimerTask timerTaskObj = new TimerTask() {
-//            public void run() {
-//                CAMERA_INSTANCE.takePicture(null, null, pictureCallback);
-//            }
-//        };
-//        timerObj.schedule(timerTaskObj, 0, 1000);
-//    }
-
-    public void takePicture() {
-        CAMERA_INSTANCE.takePicture(null, null, pictureCallback);
+    public void scheduleTakePicture() {
+        final Timer timerObj = new Timer();
+        final TimerTask timerTaskObj = new TimerTask() {
+            public void run() {
+                CAMERA_INSTANCE.takePicture(null, null, pictureCallback);
+            }
+        };
+        timerObj.schedule(timerTaskObj, 0, 5000);
     }
 
     public void close() {
         try {
             serverSocket.close();
+            CAMERA_INSTANCE.setPreviewCallback(null);
         } catch (IOException e) {
             Log.d("SERVER", "Error, probably interrupted in accept(), see log");
             e.printStackTrace();
@@ -61,7 +52,7 @@ public class SocketServer extends Thread {
         bRunning = false;
     }
 
-    public void run() {
+    public void listen() {
         try {
             Log.d("SERVER", "Creating Socket");
             serverSocket = new ServerSocket(port);

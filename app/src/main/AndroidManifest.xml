@@ -18,6 +18,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <service android:name=".MyIntentService"></service>
         <activity
             android:name="com.example.myapp.HttpServerActivity"
             android:label="@string/app_name" >

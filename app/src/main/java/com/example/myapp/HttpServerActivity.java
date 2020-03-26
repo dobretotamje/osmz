@@ -1,34 +1,28 @@
 package com.example.myapp;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.hardware.Camera;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+
 public class HttpServerActivity extends Activity implements OnClickListener {
 
     public static final Camera CAMERA_INSTANCE = Camera.open();
     private TextView textView;
-    private final Handler handler = new Handler(Looper.getMainLooper()) {
-        @Override
-        public void handleMessage(Message inputMessage) {
-            String data = inputMessage.getData().getString("request");
-            data = data + "\n";
-            textView.append(data);
-        }
-    };
     private TextView threadCountTextView;
     private FrameLayout previewLayout;
-    private Button takePictureBtn;
-    private ThreadCountListener threadCountListener;
-    private SocketServer s;
+    private Intent myService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,8 +36,6 @@ public class HttpServerActivity extends Activity implements OnClickListener {
         btn2.setOnClickListener(this);
 
         this.textView = findViewById(R.id.textView);
-        this.takePictureBtn = findViewById(R.id.takePictureBtn);
-        this.takePictureBtn.setOnClickListener(this);
 
         this.threadCountTextView = findViewById(R.id.editTextThreads);
 
@@ -55,30 +47,28 @@ public class HttpServerActivity extends Activity implements OnClickListener {
 
     @Override
     public void onClick(View v) {
-        // TODO Auto-generated method stub
         if (v.getId() == R.id.button1) {
-            s = new SocketServer(handler);
-            this.threadCountListener = new ThreadCountListener(s);
-            this.threadCountTextView.addTextChangedListener(threadCountListener);
+            myService = new Intent(this, MyIntentService.class);
             final CharSequence text = this.threadCountTextView.getText();
             if (text != null && !text.toString().isEmpty()) {
-                s.setThreadsAvailable(Integer.valueOf(text.toString()));
+                myService.putExtra("threadCnt", Integer.valueOf(text.toString()));
+            } else {
+                Log.d("Application", "Please specifiy number of threads used by server");
+                return;
             }
-            s.start();
-            //s.scheduleTakePicture();
+            EventBus.getDefault().register(this);
+            startService(myService);
         }
         if (v.getId() == R.id.button2) {
-            s.close();
-            try {
-                s.join();
-                this.threadCountTextView.removeTextChangedListener(threadCountListener);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        if (v.getId() == R.id.takePictureBtn && s != null) {
-            s.takePicture();
+            EventBus.getDefault().unregister(this);
+            stopService(myService);
         }
     }
 
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onMessageEvent(Message message) {
+        String data = message.getData().getString("request");
+        data = data + "\n";
+        textView.append(data);
+    }
 }

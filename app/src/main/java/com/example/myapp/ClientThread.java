@@ -75,8 +75,7 @@ public class ClientThread extends Thread {
                             "\n");
                     out.flush();
 
-                    FileInputStream fileInputStream = new FileInputStream(file);
-                    IOUtils.copy(fileInputStream, o);
+                    IOUtils.copy(new FileInputStream(file), o);
 
                     sendMessage(request.toString() + " Length: " + file.length());
 

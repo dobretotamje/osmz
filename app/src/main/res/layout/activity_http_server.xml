@@ -33,7 +33,8 @@
         android:layout_width="79dp"
         android:layout_height="wrap_content"
         android:ems="10"
-        android:inputType="number" />
+        android:inputType="number"
+        android:text="5" />
 
     <TextView
         android:id="@+id/textView"
